@@ -68,4 +68,136 @@ samples, guidance on mobile development, and a full API reference.
 AI Disclosure
  Pada tugas ini saya menggunakan bantuan declarative AI (ChatGPT) sebagai pembantu saya dalam menyelesaikan tugas ini, saya menggunakan bantuan AI untuk memahami perubahan code yang saya lakukan pada tugas ini. Apa yang saya lakukan dengan generative AI saat saya mengerjakan tugas ini adalah, saya bertanya pada AI pada bagian bagian code saya. Misal saya menemukan error dan buntu untuk memperbaiki nya, saya mengscreenshoot error nya dan memberikan nya ke AI agar tau apa yang kesalahan yang saya lakukan dan bisa memahami nya. berikut prompt yang saya gunakan:
     - "Aku sudah melakukan pengisian sesuai instruksi, tetapi kenapa masih ada error? , tolong jelaskan errornya, dan jika ketemu error yang seperti ini apa yang harus dilakukan"
-    
+
+
+
+### Tugas 8
+
+Pada tugas ini, saya menambahkan formulir Tambah Experience di
+`lib/screens/experience_form.dart`. Formulir bisa dibuka dengan kartu
+Tambah Experience pada halaman utama dan opsi Add Experience pada drawer.
+
+Input formulir disesuaikan dengan model Experience pada proyek Django:
+judul, deskripsi, kategori, URL thumbnail, dan tanggal selesai. Thumbnail
+dan tanggal selesai bersifat opsional. Atribut started_at tidak menjadi
+input karena pada model Django nilainya diisi secara otomatis.
+
+Tombol Simpan menampilkan ringkasan seluruh isian setelah validasi berhasil.
+Pada tahap ini, data belum dikirim atau disimpan ke backend Django.
+
+1. Perbedaan Navigator.push(), Navigator.pushReplacement(), dan Navigator.pop(), serta navigasi formulir dan Home
+
+   Navigator.push() menambahkan halaman baru ke atas tumpukan navigasi.
+   Halaman sebelumnya tetap berada di bawahnya sehingga pengguna dapat
+   kembali ke halaman tersebut.
+
+   Navigator.pushReplacement() mengganti halaman teratas dengan halaman
+   baru. Halaman yang diganti tidak lagi tersedia sebagai tujuan kembali
+   pada tumpukan tersebut.
+
+   Navigator.pop() mengeluarkan route teratas. Dalam aplikasi ini, pop()
+   juga digunakan untuk menutup drawer dan dialog ringkasan.
+
+   Kartu Tambah Experience menggunakan Navigator.push() untuk membuka
+   ExperienceFormPage. Dengan demikian, halaman utama tetap berada di
+   bawah formulir dan dapat diakses menggunakan tombol kembali perangkat.
+
+   Opsi Home pada drawer menutup drawer terlebih dahulu, kemudian memakai
+   pushAndRemoveUntil() dengan kondisi yang selalu false. Cara ini membuka
+   halaman utama dan menghapus seluruh route sebelumnya agar halaman
+   formulir tidak menumpuk dalam riwayat navigasi.
+
+2. Peran Scaffold, AppBar, dan Drawer dalam menjaga konsistensi halaman
+
+   Scaffold menyediakan kerangka halaman, termasuk tempat untuk AppBar,
+   drawer, dan isi halaman. AppBar menampilkan judul agar pengguna mengetahui
+   halaman yang sedang dibuka. LeftDrawer digunakan kembali pada halaman
+   utama, formulir proyek, dan formulir Experience sehingga menu navigasinya
+   konsisten.
+
+   Contoh penggunaan tema adalah warna latar AppBar pada halaman utama dan
+   formulir Experience yang mengambil Theme.of(context).colorScheme.primary.
+   Tombol Simpan pada formulir Experience juga menggunakan warna primary,
+   sedangkan teksnya menggunakan onPrimary agar tetap terbaca.
+
+3. Alasan pemilihan layout formulir dan peran widget pengatur jarak serta penggulir
+
+   Saya menggunakan Column untuk menyusun input secara vertikal agar alur
+   pengisian mudah diikuti. CrossAxisAlignment.stretch membuat input dan
+   tombol menggunakan lebar yang tersedia.
+
+   Padding memberi jarak antara isi formulir dan tepi layar, sedangkan
+   SizedBox memberi jarak antarinput agar tampilannya tidak terlalu rapat.
+   SafeArea membantu menjaga isi dari area antarmuka sistem.
+
+   Column dibungkus SingleChildScrollView agar formulir dapat digulir ketika
+   layar sempit atau papan ketik mengurangi ruang yang tersedia. Scaffold
+   secara default menyesuaikan ukuran body saat papan ketik tampil.
+   Isi dialog ringkasan juga dapat digulir jika teks yang dimasukkan panjang.
+
+4. Peran GlobalKey<FormState>, validator, dan validate()
+
+   GlobalKey<FormState> digunakan untuk mengakses state Form melalui
+   _formKey.currentState. Setiap validator memeriksa nilai input dan
+   mengembalikan pesan kesalahan jika nilainya tidak valid, atau null
+   jika nilainya valid.
+
+   Ketika Simpan ditekan, validate() menjalankan seluruh validator dalam
+   formulir. Jika ada input yang tidak valid, proses dihentikan dan pesan
+   kesalahan ditampilkan pada kolom terkait. Jika semuanya valid, save()
+   menjalankan onSaved untuk mengambil nilai input, lalu showDialog()
+   menampilkan ringkasannya dalam AlertDialog.
+
+   Contoh nilai yang ditolak adalah judul berisi spasi saja. Setelah trim(),
+   nilainya menjadi kosong sehingga tidak memenuhi aturan judul wajib.
+   URL thumbnail seperti "asal" juga ditolak karena tidak memiliki skema
+   dan host yang diperlukan.
+
+   Pemilihan TextInputType.url hanya membantu menyediakan papan ketik
+   yang sesuai. Pengguna masih dapat mengetik atau menempelkan teks
+   sembarang, sehingga validator tetap diperlukan.
+
+#### Cara menjalankan
+
+Dari direktori utama proyek, jalankan:
+
+```powershell
+flutter pub get
+flutter analyze
+flutter run -d chrome
+
+
+Alternatif yang saya gunakan untuk menjalankan aplikasi melalui server web:
+
+```powershell
+flutter run -d web-server --web-hostname 127.0.0.1 --web-port 8080
+
+
+Buka http://127.0.0.1:8080 di browser dan biarkan proses terminal berjalan.
+
+Untuk mencoba fitur, buka Tambah Experience dari kartu atau Add Experience
+dari drawer. Isi formulir, lalu tekan Simpan untuk melihat ringkasan.
+Tekan Tutup untuk kembali ke formulir dan gunakan Home pada drawer untuk
+kembali ke halaman utama.
+
+#### Penggunaan AI
+
+Saya menggunakan ChatGPT untuk membantu memahami instruksi Tugas 8,
+menyesuaikan field formulir dengan model Experience, menjelaskan error, serta membantu untuk membuat draf dokumentasi.
+
+Strategi prompting yang saya gunakan adalah memberikan instruksi tugas,
+dan meminta AI untuk membantu dalam menyesuaikan code. Setelah
+menerapkan kode, saya mengirimkan screenshot hasil atau error untuk
+mendapatkan penjelasan dan langkah perbaikan.
+
+Ringkasan log interaksi:
+- Memberikan kode Flutter dan model Django untuk menyesuaikan formulir.
+- Meminta bantuan ketika terjadi kesalahan penulisan navigasi.
+- Meminta bantuan ketika browser menampilkan ERR_CONNECTION_REFUSED.
+- Mengirimkan hasil formulir dan dialog ringkasan untuk ditinjau.
+
+Saya menerapkan kode ke proyek dan memperbaiki kesalahan penulisan
+pushAndRemoveUntil serta penggunaan variabel navigator. Saya juga
+menjalankan flutter analyze yang menghasilkan "No issues found" dan
+mencoba pengisian formulir sampai dialog ringkasan muncul.
+
