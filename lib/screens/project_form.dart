@@ -1,5 +1,11 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:myportofolio_mobile/widgets/left_drawer.dart';
+import 'package:provider/provider.dart';
+
+import '../models/project.dart';
+import '../providers/auth_state.dart';
+import '../services/api_client.dart';
+import '../utils/auth_guard.dart';
+import '../widgets/left_drawer.dart';
 
 class ProjectFormPage extends StatefulWidget {
   const ProjectFormPage({super.key});
@@ -13,208 +19,260 @@ class _ProjectFormPageState extends State<ProjectFormPage> {
 
   String _projectName = '';
   String _description = '';
-  String _category = 'Web Development';
   String _technologies = '';
   String _projectLink = '';
+  String _imageUrl = '';
 
-  final List<String> _categories = [
-    'Web Development',
-    'Mobile Development',
-    'Machine Learning',
-    'Data Science',
-    'Other',
-  ];
+  bool _isSubmitting = false;
+  String? _errorMessage;
 
-  InputDecoration _inputDecoration(String label, String hint) {
+  InputDecoration _decoration(String label, String hint) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
+      border: const OutlineInputBorder(),
     );
   }
 
-  void _submitForm() {
-    if (!_formKey.currentState!.validate()) {
+  String? _requiredText(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Kolom ini wajib diisi.';
+    }
+    return null;
+  }
+
+  String? _validateUrl(String? value, {bool optional = false}) {
+    final text = value?.trim() ?? '';
+
+    if (text.isEmpty) {
+      return optional ? null : 'URL proyek wajib diisi.';
+    }
+
+    final uri = Uri.tryParse(text);
+
+    if (uri == null ||
+        !uri.hasAuthority ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return 'Masukkan URL lengkap dengan http:// atau https://.';
+    }
+
+    return null;
+  }
+
+  Future<void> _submitForm() async {
+    if (_isSubmitting || !_formKey.currentState!.validate()) {
       return;
     }
 
-    // Menjalankan onSaved pada setiap field.
     _formKey.currentState!.save();
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Proyek berhasil ditambahkan!'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Nama Proyek: $_projectName'),
-                const SizedBox(height: 8),
-                Text('Deskripsi: $_description'),
-                const SizedBox(height: 8),
-                Text('Kategori: $_category'),
-                const SizedBox(height: 8),
-                Text(
-                  'Teknologi: '
-                  '${_technologies.isEmpty ? "-" : _technologies}',
-                ),
-                const SizedBox(height: 8),
-                Text('Tautan: ${_projectLink.isEmpty ? "-" : _projectLink}'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
+    final auth = context.read<AuthState>();
+    final api = context.read<ApiClient>();
 
-                // Mengosongkan input dan mengembalikan kategori awal.
-                _formKey.currentState!.reset();
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
 
-                _projectName = '';
-                _description = '';
-                _category = 'Web Development';
-                _technologies = '';
-                _projectLink = '';
-              },
-              child: const Text('OK'),
+    try {
+      final loggedIn = await ensureLoggedIn(context);
+
+      if (!mounted || !loggedIn) return;
+
+      final token = auth.token;
+
+      if (token == null) {
+        setState(() {
+          _errorMessage = 'Silakan login terlebih dahulu.';
+        });
+        return;
+      }
+
+      final project = Project(
+        title: _projectName,
+        description: _description,
+        techStack: _technologies,
+        projectUrl: _projectLink,
+        projectImageUrl: _imageUrl,
+      );
+
+      final savedProject = await api.createProject(project, token: token);
+
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Proyek berhasil disimpan!'),
+            content: SingleChildScrollView(
+              child: Text(
+                'Nama: ${savedProject.title}\n\n'
+                'Deskripsi: ${savedProject.description}\n\n'
+                'Teknologi: ${savedProject.techStack}\n\n'
+                'URL: ${savedProject.projectUrl}',
+              ),
             ),
-          ],
-        );
-      },
-    );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      _formKey.currentState!.reset();
+      _projectName = '';
+      _description = '';
+      _technologies = '';
+      _projectLink = '';
+      _imageUrl = '';
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        try {
+          await auth.logout();
+        } catch (_) {
+          // AuthState tetap menghapus token lokal.
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        if (error.statusCode == 401) {
+          _errorMessage =
+              'Login sudah tidak valid. Tekan Simpan untuk login kembali.';
+        } else if (error.statusCode == 403) {
+          _errorMessage =
+              'Akun ini tidak memiliki izin. Gunakan akun superuser Django.';
+        } else {
+          _errorMessage = error.message;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage =
+            'Belum dapat memastikan penyimpanan. Periksa koneksi dan '
+            'daftar proyek sebelum mencoba lagi.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Project Form'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
+        title: const Text('Tambah Proyek'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
-      drawer: const LeftDrawer(),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Nama proyek wajib diisi.
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextFormField(
-                  decoration: _inputDecoration(
+      drawer: _isSubmitting ? null : const LeftDrawer(),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  enabled: !_isSubmitting,
+                  maxLength: 255,
+                  decoration: _decoration(
                     'Nama Proyek',
-                    'Masukkan nama proyek',
+                    'Contoh: Aplikasi Portofolio',
                   ),
+                  validator: _requiredText,
                   onSaved: (value) {
-                    _projectName = value?.trim() ?? '';
-                  },
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Nama proyek tidak boleh kosong!';
-                    }
-                    return null;
+                    _projectName = value!.trim();
                   },
                 ),
-              ),
-
-              // Deskripsi wajib diisi.
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextFormField(
+                const SizedBox(height: 16),
+                TextFormField(
+                  enabled: !_isSubmitting,
                   maxLines: 5,
-                  decoration: _inputDecoration(
-                    'Deskripsi Proyek',
+                  decoration: _decoration(
+                    'Deskripsi',
                     'Jelaskan proyek yang kamu buat',
                   ),
+                  validator: _requiredText,
                   onSaved: (value) {
-                    _description = value?.trim() ?? '';
-                  },
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Deskripsi proyek tidak boleh kosong!';
-                    }
-                    return null;
+                    _description = value!.trim();
                   },
                 ),
-              ),
-
-              // Kategori memiliki nilai awal.
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: DropdownButtonFormField<String>(
-                  initialValue: 'Web Development',
-                  isExpanded: true,
-                  decoration: _inputDecoration(
-                    'Kategori Proyek',
-                    'Pilih kategori proyek',
+                const SizedBox(height: 16),
+                TextFormField(
+                  enabled: !_isSubmitting,
+                  maxLength: 255,
+                  decoration: _decoration(
+                    'Teknologi',
+                    'Contoh: Flutter, Dart, Django',
                   ),
-                  items: _categories.map((category) {
-                    return DropdownMenuItem<String>(
-                      value: category,
-                      child: Text(category),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    _category = value ?? 'Web Development';
-                  },
+                  validator: _requiredText,
                   onSaved: (value) {
-                    _category = value ?? 'Web Development';
+                    _technologies = value!.trim();
                   },
                 ),
-              ),
-
-              // Teknologi bersifat opsional.
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextFormField(
-                  decoration: _inputDecoration(
-                    'Teknologi yang Digunakan',
-                    'Contoh: Flutter, Django, Figma',
-                  ),
-                  onSaved: (value) {
-                    _technologies = value?.trim() ?? '';
-                  },
-                ),
-              ),
-
-              // Tautan proyek bersifat opsional.
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextFormField(
+                const SizedBox(height: 16),
+                TextFormField(
+                  enabled: !_isSubmitting,
+                  maxLength: 500,
                   keyboardType: TextInputType.url,
-                  decoration: _inputDecoration(
-                    'Tautan Proyek',
-                    'URL proyek (opsional)',
+                  decoration: _decoration(
+                    'URL Proyek',
+                    'https://github.com/username/repository',
                   ),
+                  validator: (value) => _validateUrl(value),
                   onSaved: (value) {
-                    _projectLink = value?.trim() ?? '';
+                    _projectLink = value!.trim();
                   },
                 ),
-              ),
-
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: _submitForm,
-                    child: const Text('Save'),
+                const SizedBox(height: 16),
+                TextFormField(
+                  enabled: !_isSubmitting,
+                  maxLength: 500,
+                  keyboardType: TextInputType.url,
+                  decoration: _decoration(
+                    'URL Gambar (opsional)',
+                    'https://example.com/gambar.png',
                   ),
+                  validator: (value) {
+                    return _validateUrl(value, optional: true);
+                  },
+                  onSaved: (value) {
+                    _imageUrl = value?.trim() ?? '';
+                  },
                 ),
-              ),
-            ],
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submitForm,
+                  child: Text(_isSubmitting ? 'Menyimpan...' : 'Simpan'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -2,12 +2,19 @@ import 'package:material_ui/material_ui.dart';
 import 'package:myportofolio_mobile/screens/menu.dart';
 import 'package:myportofolio_mobile/screens/project_form.dart';
 import 'package:myportofolio_mobile/screens/experience_form.dart';
+import 'package:myportofolio_mobile/screens/project_list.dart';
+import 'package:provider/provider.dart';
+import 'package:myportofolio_mobile/providers/auth_state.dart';
+import 'package:myportofolio_mobile/screens/login.dart';
+import 'package:myportofolio_mobile/utils/auth_guard.dart';
 
 class LeftDrawer extends StatelessWidget {
   const LeftDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthState>();
+
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -46,15 +53,29 @@ class LeftDrawer extends StatelessWidget {
             },
           ),
           ListTile(
+            leading: const Icon(Icons.folder_open),
+            title: const Text('Lihat Proyek'),
+            onTap: () {
+              final navigator = Navigator.of(context);
+              navigator.pop();
+              navigator.push(
+                MaterialPageRoute(builder: (_) => const ProjectListPage()),
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.add_circle_outline),
             title: const Text('Add Project'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProjectFormPage(),
-                ),
+            onTap: () async {
+              final navigator = Navigator.of(context);
+              navigator.pop();
+
+              final loggedIn = await ensureLoggedIn(navigator.context);
+
+              if (!navigator.mounted || !loggedIn) return;
+
+              navigator.push(
+                MaterialPageRoute(builder: (_) => const ProjectFormPage()),
               );
             },
           ),
@@ -69,6 +90,50 @@ class LeftDrawer extends StatelessWidget {
                   builder: (context) => const ExperienceFormPage(),
                 ),
               );
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: Icon(auth.isLoggedIn ? Icons.logout : Icons.login),
+            title: Text(auth.isLoggedIn ? 'Logout' : 'Login'),
+            onTap: () async {
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+
+              navigator.pop();
+
+              if (auth.isLoggedIn) {
+                try {
+                  await auth.logout();
+
+                  if (!messenger.mounted) return;
+
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Berhasil logout.')),
+                  );
+                } catch (_) {
+                  if (!messenger.mounted) return;
+
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Login lokal sudah dihapus, tetapi logout '
+                        'ke server gagal. Silakan login dan coba lagi.',
+                      ),
+                    ),
+                  );
+                }
+              } else {
+                final success = await navigator.push<bool>(
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+
+                if (success == true && messenger.mounted) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Berhasil login.')),
+                  );
+                }
+              }
             },
           ),
         ],
